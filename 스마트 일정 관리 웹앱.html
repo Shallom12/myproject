@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 스마트 일정 관리</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden text-gray-800">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex">
+        <div class="h-16 flex items-center px-6 border-b border-gray-200">
+            <i class="fa-solid fa-calendar-check text-blue-500 text-xl mr-3"></i>
+            <h1 class="font-bold text-lg text-gray-800">AI Scheduler</h1>
+        </div>
+        <nav class="flex-1 p-4 space-y-2">
+            <button onclick="switchTab('dashboard')" id="tab-dashboard" class="w-full flex items-center px-4 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium transition-colors">
+                <i class="fa-solid fa-chart-pie w-5 mr-2"></i> 대시보드
+            </button>
+            <button onclick="switchTab('sheet')" id="tab-sheet" class="w-full flex items-center px-4 py-2 text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg font-medium transition-colors">
+                <i class="fa-solid fa-table w-5 mr-2"></i> 스프레드시트 뷰
+            </button>
+        </nav>
+        <div class="p-4 border-t border-gray-200 text-xs text-gray-400">
+            &copy; 2026 AI Scheduler
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full relative">
+        
+        <!-- Header -->
+        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
+            <h2 class="text-xl font-semibold" id="page-title">대시보드</h2>
+            <div class="flex items-center space-x-4">
+                <button id="enable-noti-btn" onclick="requestNotificationPermission()" class="text-sm px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-md hover:bg-yellow-200 transition-colors flex items-center">
+                    <i class="fa-solid fa-bell mr-1.5"></i> 알림 권한 켜기
+                </button>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="flex-1 overflow-auto p-6 relative">
+            
+            <!-- Dashboard View -->
+            <div id="view-dashboard" class="max-w-4xl mx-auto space-y-6">
+                <!-- Input Section -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fa-solid fa-wand-magic-sparkles text-purple-500 mr-2"></i> 일정을 자연어로 입력해보세요
+                    </h3>
+                    <p class="text-sm text-gray-500 mb-4">예: "다음주 수요일 3시 회의, 목요일 5시 회식" 처럼 여러 일정을 적거나 파일을 첨부하세요.</p>
+                    
+                    <div class="relative">
+                        <textarea id="schedule-input" class="w-full border border-gray-300 rounded-lg p-4 pb-14 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none h-32" placeholder="여러 일정을 한 번에 입력하거나 이미지, PDF, CSV를 첨부해보세요..."></textarea>
+                        
+                        <!-- File Upload Button -->
+                        <div class="absolute bottom-3 left-3">
+                            <input type="file" id="file-input" accept="image/*,.pdf,.csv,.txt" class="hidden" onchange="handleFileSelect(event)">
+                            <button onclick="document.getElementById('file-input').click()" class="text-gray-500 hover:text-blue-600 transition-colors flex items-center justify-center p-2 rounded-full hover:bg-gray-100" title="파일 첨부 (이미지, PDF, CSV 등)">
+                                <i class="fa-solid fa-paperclip text-lg"></i>
+                            </button>
+                        </div>
+
+                        <div class="absolute bottom-3 right-3 flex space-x-2">
+                            <button id="analyze-btn" onclick="analyzeSchedule()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center">
+                                <span id="analyze-text">등록하기</span>
+                                <div id="analyze-loader" class="loader ml-2 hidden" style="width: 16px; height: 16px; border-width: 2px;"></div>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Attached File Info -->
+                    <div id="attached-file-info" class="hidden mt-3 p-3 bg-blue-50 rounded-lg flex items-center justify-between border border-blue-100 text-sm">
+                        <div class="flex items-center text-blue-700 overflow-hidden">
+                            <i class="fa-solid fa-file-lines mr-2 shrink-0"></i>
+                            <span id="file-name" class="truncate font-medium"></span>
+                        </div>
+                        <button onclick="removeFile()" class="text-blue-400 hover:text-blue-700 ml-4 shrink-0 transition-colors">
+                            <i class="fa-solid fa-xmark text-lg"></i>
+                        </button>
+                    </div>
+
+                    <div id="error-msg" class="text-red-500 text-sm mt-2 hidden"></div>
+                </div>
+
+                <!-- Recent Added Cards -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold">다가오는 일정 (구글 캘린더 연동)</h3>
+                        <button onclick="exportToICS()" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1.5 rounded-md text-sm shadow-sm transition-colors flex items-center font-medium">
+                            <i class="fa-solid fa-calendar-plus mr-1.5"></i> 전체 일정 일괄 등록 (.ics)
+                        </button>
+                    </div>
+                    <div id="events-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="col-span-full text-center py-8 text-gray-400 text-sm" id="empty-state">
+                            <i class="fa-solid fa-calendar-xmark text-4xl mb-3 block opacity-50"></i>
+                            등록된 일정이 없습니다.
+                        </div>
+                        <!-- Event Cards will be injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sheet View -->
+            <div id="view-sheet" class="hidden h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-100">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 class="font-semibold flex items-center text-green-700">
+                        <i class="fa-solid fa-file-excel mr-2"></i> 일정 데이터베이스
+                    </h3>
+                    <button onclick="exportToCSV()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-md text-sm shadow-sm transition-colors flex items-center">
+                        <i class="fa-solid fa-download mr-1.5"></i> CSV 다운로드
+                    </button>
+                </div>
+                <div class="flex-1 overflow-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-gray-100 sticky top-0 shadow-sm text-sm">
+                            <tr>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600 w-12 text-center">ID</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600">일정명</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600">시작 일시</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600">종료 일시</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600">장소</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600">설명</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600 text-center">작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sheet-body" class="text-sm divide-y divide-gray-200">
+                            <!-- Table rows will be injected here -->
+                        </tbody>
+                    </table>
+                    <div id="sheet-empty-state" class="text-center py-12 text-gray-400 text-sm hidden">
+                        데이터가 없습니다.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // 전역 상태
+        let schedules = [];
+        let nextId = 1;
+        let notificationInterval;
+        let attachedFile = null;
+        let attachedFileText = null;
+
+        // 오늘 날짜 정보 (프롬프트 주입용)
+        const getNowIso = () => {
+            const now = new Date();
+            // 임의의 현재 시간을 요청 컨텍스트에 맞춤 (2026-07-23)
+            return now.toISOString();
+        };
+
+        // 탭 전환 로직
+        function switchTab(tabId) {
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-sheet').classList.add('hidden');
+            
+            document.getElementById('tab-dashboard').className = 'w-full flex items-center px-4 py-2 text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg font-medium transition-colors';
+            document.getElementById('tab-sheet').className = 'w-full flex items-center px-4 py-2 text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg font-medium transition-colors';
+
+            if(tabId === 'dashboard') {
+                document.getElementById('view-dashboard').classList.remove('hidden');
+                document.getElementById('tab-dashboard').className = 'w-full flex items-center px-4 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium transition-colors';
+                document.getElementById('page-title').innerText = '대시보드';
+            } else {
+                document.getElementById('view-sheet').classList.remove('hidden');
+                document.getElementById('view-sheet').classList.add('flex'); // to keep flex layout
+                document.getElementById('tab-sheet').className = 'w-full flex items-center px-4 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium transition-colors';
+                document.getElementById('page-title').innerText = '스프레드시트 뷰';
+            }
+        }
+
+        // 알림 권한 요청
+        function requestNotificationPermission() {
+            if (!("Notification" in window)) {
+                alert("이 브라우저는 데스크톱 알림을 지원하지 않습니다.");
+                return;
+            }
+            Notification.requestPermission().then(function (permission) {
+                if (permission === "granted") {
+                    const btn = document.getElementById('enable-noti-btn');
+                    btn.classList.remove('bg-yellow-100', 'text-yellow-700');
+                    btn.classList.add('bg-green-100', 'text-green-700');
+                    btn.innerHTML = '<i class="fa-solid fa-bell-slash mr-1.5"></i> 알림 켜짐';
+                    btn.disabled = true;
+                    alert("알림 권한이 허용되었습니다. 일정 시간에 알림이 울립니다!");
+                    startNotificationChecker();
+                }
+            });
+        }
+
+        // 파일 처리 로직
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const fileInfoEl = document.getElementById('attached-file-info');
+            const fileNameEl = document.getElementById('file-name');
+            fileNameEl.textContent = file.name;
+            fileInfoEl.classList.remove('hidden');
+            
+            // 텍스트/CSV 파일인 경우 텍스트로 읽기
+            if (file.type.startsWith('text/') || file.name.toLowerCase().endsWith('.csv')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    attachedFileText = e.target.result;
+                    attachedFile = null; 
+                };
+                reader.readAsText(file);
+            } else {
+                // 이미지/PDF 등은 Base64로 인코딩하여 인라인 데이터로 준비
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64Data = e.target.result.split(',')[1];
+                    attachedFile = {
+                        inlineData: {
+                            data: base64Data,
+                            mimeType: file.type || 'application/pdf'
+                        }
+                    };
+                    attachedFileText = null;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function removeFile() {
+            attachedFile = null;
+            attachedFileText = null;
+            document.getElementById('file-input').value = '';
+            document.getElementById('attached-file-info').classList.add('hidden');
+        }
+
+        // Gemini API 호출을 통해 자연어에서 JSON 추출
+        async function analyzeSchedule() {
+            const inputEl = document.getElementById('schedule-input');
+            const text = inputEl.value.trim();
+            const errorEl = document.getElementById('error-msg');
+            
+            if (!text && !attachedFile && !attachedFileText) {
+                errorEl.innerText = "일정 내용이나 파일을 입력/첨부해주세요.";
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            errorEl.classList.add('hidden');
+
+            setLoading(true);
+
+            // 프롬프트 및 파일 데이터 구성
+            let combinedText = text;
+            if (attachedFileText) {
+                combinedText += "\n\n[첨부된 문서 데이터]\n" + attachedFileText;
+            }
+
+            const parts = [{ text: combinedText || "첨부된 파일에서 일정 정보를 모두 추출해줘." }];
+            if (attachedFile) {
+                parts.push(attachedFile);
+            }
+
+            // Gemini API 호출 페이로드 (여러 일정 추출을 위해 ARRAY 스키마 사용)
+            const payload = {
+                contents: [{ parts: parts }],
+                systemInstruction: {
+                    parts: [{ 
+                        text: `당신은 세계 최고의 비서입니다. 사용자가 입력한 텍스트, 이미지, PDF 또는 CSV 데이터를 분석하여 여러 개의 일정 정보를 모두 추출하세요. 
+                        현재 시간은 ${new Date().toLocaleString('ko-KR')} 입니다. 이 시간을 기준으로 '내일', '다음주' 등을 계산하세요.
+                        종료 시간이 명확하지 않으면 시작 시간으로부터 1시간 뒤로 설정하세요.
+                        장소가 없으면 빈 문자열을 반환하세요.` 
+                    }]
+                },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                title: { type: "STRING", description: "일정의 제목 (예: 클라이언트 미팅)" },
+                                startDateTime: { type: "STRING", description: "시작 일시 (ISO 8601 포맷, 예: 2026-07-24T15:00:00)" },
+                                endDateTime: { type: "STRING", description: "종료 일시 (ISO 8601 포맷, 예: 2026-07-24T16:00:00)" },
+                                location: { type: "STRING", description: "장소 (예: 강남역, 없으면 빈칸)" },
+                                description: { type: "STRING", description: "기타 추가 설명" }
+                            },
+                            required: ["title", "startDateTime", "endDateTime"]
+                        }
+                    }
+                }
+            };
+
+            const apiKey = ""; // 캔버스 환경에서 자동 주입
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0].text) {
+                    const jsonStr = result.candidates[0].content.parts[0].text;
+                    const parsedData = JSON.parse(jsonStr);
+                    
+                    // 배열로 반환된 경우 각각 추가
+                    if (Array.isArray(parsedData)) {
+                        parsedData.forEach(data => addScheduleToSystem(data));
+                    } else {
+                        addScheduleToSystem(parsedData);
+                    }
+                    
+                    inputEl.value = ''; // 초기화
+                    removeFile(); // 파일 초기화
+                } else {
+                    throw new Error("결과를 파싱할 수 없습니다.");
+                }
+            } catch (err) {
+                console.error(err);
+                errorEl.innerText = "일정을 분석하는 도중 오류가 발생했습니다. 다시 시도해주세요.";
+                errorEl.classList.remove('hidden');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function setLoading(isLoading) {
+            const btnText = document.getElementById('analyze-text');
+            const loader = document.getElementById('analyze-loader');
+            const btn = document.getElementById('analyze-btn');
+
+            if (isLoading) {
+                btnText.innerText = '분석 중...';
+                loader.classList.remove('hidden');
+                btn.disabled = true;
+                btn.classList.add('opacity-75');
+            } else {
+                btnText.innerText = '등록하기';
+                loader.classList.add('hidden');
+                btn.disabled = false;
+                btn.classList.remove('opacity-75');
+            }
+        }
+
+        function addScheduleToSystem(data) {
+            const schedule = {
+                id: nextId++,
+                title: data.title || "새 일정",
+                startDateTime: new Date(data.startDateTime),
+                endDateTime: new Date(data.endDateTime),
+                location: data.location || "",
+                description: data.description || "",
+                notified: false
+            };
+            
+            schedules.push(schedule);
+            
+            // UI 업데이트
+            renderDashboardCards();
+            renderSheetTable();
+        }
+
+        // 구글 캘린더 URL 포맷팅 (YYYYMMDDTHHMMSSZ)
+        function formatGoogleCalendarDate(dateObj) {
+            return dateObj.toISOString().replace(/-|:|\.\d\d\d/g, "");
+        }
+
+        function generateGCalLink(schedule) {
+            const baseUrl = "https://calendar.google.com/calendar/render?action=TEMPLATE";
+            const text = encodeURIComponent(schedule.title);
+            const dates = `${formatGoogleCalendarDate(schedule.startDateTime)}/${formatGoogleCalendarDate(schedule.endDateTime)}`;
+            const details = encodeURIComponent(schedule.description);
+            const location = encodeURIComponent(schedule.location);
+            
+            return `${baseUrl}&text=${text}&dates=${dates}&details=${details}&location=${location}`;
+        }
+
+        function deleteSchedule(id) {
+            schedules = schedules.filter(s => s.id !== id);
+            renderDashboardCards();
+            renderSheetTable();
+        }
+
+        function renderDashboardCards() {
+            const container = document.getElementById('events-container');
+            const emptyState = document.getElementById('empty-state');
+            
+            // 기존 카드 삭제 (empty state는 남김)
+            Array.from(container.children).forEach(child => {
+                if(child.id !== 'empty-state') child.remove();
+            });
+
+            if (schedules.length === 0) {
+                emptyState.style.display = 'block';
+                return;
+            }
+            emptyState.style.display = 'none';
+
+            // 정렬 (가까운 시간 순)
+            const sorted = [...schedules].sort((a, b) => a.startDateTime - b.startDateTime);
+
+            sorted.forEach(sch => {
+                const card = document.createElement('div');
+                card.className = "border border-gray-200 rounded-lg p-5 flex flex-col justify-between hover:shadow-md transition-shadow bg-white";
+                
+                const timeString = sch.startDateTime.toLocaleString('ko-KR', { 
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                });
+                
+                const gCalLink = generateGCalLink(sch);
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-bold text-gray-800 line-clamp-1">${sch.title}</h4>
+                            <button onclick="deleteSchedule(${sch.id})" class="text-gray-400 hover:text-red-500 transition-colors">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                        <div class="text-sm text-gray-600 mb-1 flex items-center">
+                            <i class="fa-regular fa-clock w-4 text-center mr-1.5 text-blue-500"></i> ${timeString}
+                        </div>
+                        ${sch.location ? `
+                        <div class="text-sm text-gray-600 mb-3 flex items-center">
+                            <i class="fa-solid fa-location-dot w-4 text-center mr-1.5 text-red-400"></i> <span class="line-clamp-1">${sch.location}</span>
+                        </div>
+                        ` : '<div class="mb-3"></div>'}
+                    </div>
+                    <a href="${gCalLink}" target="_blank" class="mt-4 w-full text-center block bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-medium py-2 rounded-md transition-colors text-sm">
+                        <i class="fa-brands fa-google mr-1"></i> 구글 캘린더 등록
+                    </a>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderSheetTable() {
+            const tbody = document.getElementById('sheet-body');
+            const emptyState = document.getElementById('sheet-empty-state');
+            
+            tbody.innerHTML = '';
+
+            if (schedules.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            schedules.forEach(sch => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition-colors";
+                
+                const formatDate = (date) => date.toLocaleString('ko-KR', { 
+                    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' 
+                });
+
+                tr.innerHTML = `
+                    <td class="p-3 border-b border-gray-200 text-center text-gray-500">${sch.id}</td>
+                    <td class="p-3 border-b border-gray-200 font-medium">${sch.title}</td>
+                    <td class="p-3 border-b border-gray-200 text-gray-600">${formatDate(sch.startDateTime)}</td>
+                    <td class="p-3 border-b border-gray-200 text-gray-600">${formatDate(sch.endDateTime)}</td>
+                    <td class="p-3 border-b border-gray-200 text-gray-600">${sch.location || '-'}</td>
+                    <td class="p-3 border-b border-gray-200 text-gray-600 truncate max-w-xs">${sch.description || '-'}</td>
+                    <td class="p-3 border-b border-gray-200 text-center">
+                        <button onclick="deleteSchedule(${sch.id})" class="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 엑셀에서 날짜가 깨지지 않도록 포맷팅
+        function formatExcelDate(dateObj) {
+            const yyyy = dateObj.getFullYear();
+            const MM = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const dd = String(dateObj.getDate()).padStart(2, '0');
+            const hh = String(dateObj.getHours()).padStart(2, '0');
+            const mm = String(dateObj.getMinutes()).padStart(2, '0');
+            return `${yyyy}-${MM}-${dd} ${hh}:${mm}`;
+        }
+
+        // 엑셀(CSV) 다운로드 기능
+        function exportToCSV() {
+            if (schedules.length === 0) {
+                alert("내보낼 데이터가 없습니다.");
+                return;
+            }
+
+            const headers = ["ID", "일정명", "시작일시", "종료일시", "장소", "설명"];
+            const rows = schedules.map(s => [
+                s.id,
+                `"${s.title.replace(/"/g, '""')}"`,
+                `"${formatExcelDate(s.startDateTime)}"`,
+                `"${formatExcelDate(s.endDateTime)}"`,
+                `"${s.location ? s.location.replace(/"/g, '""') : ''}"`,
+                `"${s.description ? s.description.replace(/"/g, '""') : ''}"`
+            ]);
+
+            const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+                + headers.join(",") + "\n" 
+                + rows.map(e => e.join(",")).join("\n");
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `일정목록_${new Date().getTime()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 전체 구글 캘린더 파일(.ics) 일괄 내보내기 기능
+        function exportToICS() {
+            if (schedules.length === 0) {
+                alert("내보낼 일정이 없습니다.");
+                return;
+            }
+
+            let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//AI Scheduler//KO\n";
+
+            schedules.forEach(s => {
+                const start = formatGoogleCalendarDate(s.startDateTime);
+                const end = formatGoogleCalendarDate(s.endDateTime);
+                
+                icsContent += "BEGIN:VEVENT\n";
+                icsContent += `UID:sch_${s.id}_${new Date().getTime()}@aischeduler\n`;
+                icsContent += `DTSTAMP:${formatGoogleCalendarDate(new Date())}\n`;
+                icsContent += `DTSTART:${start}\n`;
+                icsContent += `DTEND:${end}\n`;
+                icsContent += `SUMMARY:${s.title}\n`;
+                if(s.description) icsContent += `DESCRIPTION:${s.description.replace(/\n/g, '\\n')}\n`;
+                if(s.location) icsContent += `LOCATION:${s.location}\n`;
+                icsContent += "END:VEVENT\n";
+            });
+
+            icsContent += "END:VCALENDAR";
+
+            const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.setAttribute('download', `전체일정_${new Date().getTime()}.ics`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 알림 체커 루프
+        function startNotificationChecker() {
+            if(notificationInterval) clearInterval(notificationInterval);
+            
+            notificationInterval = setInterval(() => {
+                const now = new Date();
+                schedules.forEach(sch => {
+                    // 알림이 안 된 일정 중, 현재 시간이 시작 시간과 일치하거나 지났을 경우 (최대 1분 차이 허용)
+                    if (!sch.notified && sch.startDateTime <= now && (now - sch.startDateTime) < 60000) {
+                        sch.notified = true; // 중복 알림 방지
+                        
+                        if (Notification.permission === "granted") {
+                            new Notification("일정 알림: " + sch.title, {
+                                body: `${sch.location ? sch.location + '에서 ' : ''}일정이 시작되었습니다.`,
+                                icon: "https://cdn-icons-png.flaticon.com/512/2838/2838779.png" // 임시 캘린더 아이콘
+                            });
+                        }
+                    }
+                });
+            }, 10000); // 10초마다 체크
+        }
+
+        // 권한 상태 초기 체크
+        if ("Notification" in window && Notification.permission === "granted") {
+            const btn = document.getElementById('enable-noti-btn');
+            btn.classList.remove('bg-yellow-100', 'text-yellow-700');
+            btn.classList.add('bg-green-100', 'text-green-700');
+            btn.innerHTML = '<i class="fa-solid fa-bell-slash mr-1.5"></i> 알림 켜짐';
+            btn.disabled = true;
+            startNotificationChecker();
+        }
+
+    </script>
+</body>
+</html>
